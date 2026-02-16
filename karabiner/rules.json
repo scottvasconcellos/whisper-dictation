@@ -1,0 +1,34 @@
+[
+  {
+    "description": "Whisper Dictation: Double-tap Control = start, Single-tap Control = stop",
+    "manipulators": [
+      {
+        "type": "basic",
+        "description": "Double-tap: run whisper-start",
+        "conditions": [{ "type": "variable_if", "name": "whisper_control_tap", "value": 1 }],
+        "from": { "key_code": "left_control", "modifiers": { "optional": ["any"] } },
+        "to": [
+          { "shell_command": "/bin/bash /Users/scottvasconcellos/bin/whisper-start.sh" },
+          { "set_variable": { "name": "whisper_control_tap", "value": 0 } }
+        ]
+      },
+      {
+        "type": "basic",
+        "description": "First tap: arm for double-tap or single-tap",
+        "from": { "key_code": "left_control", "modifiers": { "optional": ["any"] } },
+        "to": [{ "set_variable": { "name": "whisper_control_tap", "value": 1 } }],
+        "to_delayed_action": {
+          "to_if_invoked": [
+            {
+              "shell_command": "/bin/bash /Users/scottvasconcellos/bin/whisper-stop.sh",
+              "conditions": [{ "type": "variable_if", "name": "whisper_control_tap", "value": 1 }]
+            },
+            { "set_variable": { "name": "whisper_control_tap", "value": 0 } }
+          ],
+          "to_if_canceled": [{ "set_variable": { "name": "whisper_control_tap", "value": 0 } }]
+        },
+        "parameters": { "basic.to_delayed_action_delay_milliseconds": 600 }
+      }
+    ]
+  }
+]

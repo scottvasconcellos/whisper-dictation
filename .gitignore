@@ -1,0 +1,5 @@
+# Generated at install with user's HOME; do not commit
+karabiner/rules-absolute.json
+# Build outputs (recreate with install.sh)
+WhisperDictation/build/
+WhisperPaste/build/

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>WhisperDictation</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.whisper.dictation</string>
+    <key>CFBundleName</key>
+    <string>WhisperDictation</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Whisper Dictation records your voice to transcribe and paste as text.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Whisper Dictation pastes transcribed text by sending a keystroke (Cmd+V) via System Events.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Whisper Dictation needs Accessibility to paste transcribed text into the active app.</string>
+</dict>
+</plist>
