@@ -4,8 +4,8 @@ macOS voice dictation using Whisper (whisper.cpp), Karabiner-Elements, and Hamme
 
 **Operator note:** During setup and verification, run all terminal commands yourself; do not ask the user to open Terminal.
 
-**Restore point:** If you break something later, return to this working state:  
-`cd ~/Documents/My\ Apps/whisper-dictation && git checkout checkpoint-auto-paste-working && FORCE_REBUILD=1 bash install.sh`
+**Milestone / MVP:** The known-good working version is documented in [MILESTONE_MVP.md](MILESTONE_MVP.md). Restore it with:  
+`git checkout checkpoint-auto-paste-working && FORCE_REBUILD=1 bash install.sh`
 
 ## How It Works
 
@@ -24,8 +24,9 @@ bash install.sh
 
 Then:
 1. Add Karabiner rules from `karabiner/rules.json` to your Karabiner config
-2. Grant Microphone and Automation permissions in System Settings
-3. Test: Double-tap Control → speak → single-tap Control
+2. Install Hammerspoon and the paste watcher (see [docs/HAMMERSPOON_PASTE.md](docs/HAMMERSPOON_PASTE.md)); grant Hammerspoon Accessibility
+3. Grant Microphone to WhisperDictation in System Settings
+4. Test: Double-tap Control → speak → single-tap Control
 
 ## Requirements
 
