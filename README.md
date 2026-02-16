@@ -4,6 +4,9 @@ macOS voice dictation using Whisper (whisper.cpp), Karabiner-Elements, and Hamme
 
 **Operator note:** During setup and verification, run all terminal commands yourself; do not ask the user to open Terminal.
 
+**Restore point:** If you break something later, return to this working state:  
+`cd ~/Documents/My\ Apps/whisper-dictation && git checkout checkpoint-auto-paste-working && FORCE_REBUILD=1 bash install.sh`
+
 ## How It Works
 
 1. **Start:** Double-tap `Control` → Karabiner writes start trigger → WhisperDictation app plays Ping sound and starts recording
