@@ -19,6 +19,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var animationTimer: Timer?
     private var animationFrame: Int = 0
     private var recentTranscripts: [String] = []
+    private var hudWindow: NSPanel?
+    private var hudLabel: NSTextField?
     private var state: DictationState = .idle {
         didSet { updateStatusBar() }
     }
@@ -30,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         config = Config.load()
         setupStatusBar()
+        setupHUD()
         EventLogger.error(sessionId: nil, message: "app_launched", context: ["pid": ProcessInfo.processInfo.processIdentifier])
         try? FileManager.default.createDirectory(atPath: config.triggerDir, withIntermediateDirectories: true)
         let pasteTriggerDirAlt = "\(FileManager.default.homeDirectoryForCurrentUser.path)/.whisper-paste-trigger"
@@ -385,6 +388,66 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
         ]
         button.attributedTitle = NSAttributedString(string: text, attributes: attrs)
+        updateHUD(text: text, color: color, visible: state != .idle)
+    }
+
+    // MARK: - HUD Overlay
+
+    private func setupHUD() {
+        let width: CGFloat = 200
+        let height: CGFloat = 30
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.alphaValue = 0
+
+        // Blurred pill background
+        let blur = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        blur.material = .hudWindow
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = height / 2
+        blur.layer?.masksToBounds = true
+
+        // Label centred in pill
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        label.textColor = .white
+        label.alignment = .center
+        label.frame = NSRect(x: 0, y: 7, width: width, height: 16)
+        blur.addSubview(label)
+        panel.contentView = blur
+        hudLabel = label
+
+        // Bottom-right, 20pt from edges
+        if let screen = NSScreen.main {
+            let x = screen.visibleFrame.maxX - width - 20
+            let y = screen.visibleFrame.minY + 20
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        panel.orderFront(nil)
+        hudWindow = panel
+    }
+
+    private func updateHUD(text: String, color: NSColor, visible: Bool) {
+        guard let panel = hudWindow, let label = hudLabel else { return }
+        label.stringValue = text
+        label.textColor = color
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.25
+            panel.animator().alphaValue = visible ? 0.92 : 0
+        }
     }
 
     // MARK: - Idle
