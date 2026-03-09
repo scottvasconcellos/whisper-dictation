@@ -40,7 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
         }
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.pollTriggers()
         }
         RunLoop.current.add(pollTimer!, forMode: .common)
@@ -211,6 +211,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 let task = Process()
                 task.executableURL = URL(fileURLWithPath: whisperBin)
                 task.arguments = ["-m", whisperModel, "-f", wavPath, "-otxt",
+                                  "-t", "8",
+                                  "-bs", "1",
+                                  "--no-timestamps",
                                   "--prompt", "Claude Code, Anthropic. Continuous prose, no paragraph breaks."]
                 task.currentDirectoryURL = URL(fileURLWithPath: sessionDir)
                 try task.run()

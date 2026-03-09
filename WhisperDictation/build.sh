@@ -18,7 +18,6 @@ swiftc -o "${OUTPUT_APP}/Contents/MacOS/WhisperDictation" \
   "${SCRIPT_DIR}/EventLogger.swift" \
   "${SCRIPT_DIR}/SoundHelper.swift" \
   "${SCRIPT_DIR}/Recorder.swift" \
-  "${SCRIPT_DIR}/PunctuationProcessor.swift" \
   "${SCRIPT_DIR}/AppDelegate.swift"
 
 cp "${SCRIPT_DIR}/Info.plist" "${OUTPUT_APP}/Contents/Info.plist"
