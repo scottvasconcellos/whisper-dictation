@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var animationTimer: Timer?
     private var animationFrame: Int = 0
+    private var recentTranscripts: [String] = []
     private var state: DictationState = .idle {
         didSet { updateStatusBar() }
     }
@@ -248,6 +249,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 EventLogger.transcriptionComplete(sessionId: sessionId, textLength: text.count)
+                self.addToHistory(text)
                 state = .pasting
 
                 let latencyMs: Int?
@@ -290,10 +292,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = nil
             button.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
         }
+        rebuildMenu()
+        updateStatusBar()
+    }
+
+    private func addToHistory(_ text: String) {
+        recentTranscripts.insert(text, at: 0)
+        if recentTranscripts.count > 5 { recentTranscripts.removeLast() }
+        rebuildMenu()
+    }
+
+    private func rebuildMenu() {
         let menu = NSMenu()
+
+        // History section
+        let header = NSMenuItem(title: "Recent Dictations", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        menu.addItem(.separator())
+
+        if recentTranscripts.isEmpty {
+            let empty = NSMenuItem(title: "No recent dictations", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+        } else {
+            for (i, transcript) in recentTranscripts.enumerated() {
+                let preview = transcript.count > 55
+                    ? String(transcript.prefix(52)) + "…"
+                    : transcript
+                let item = NSMenuItem(title: "\(i + 1).  \(preview)", action: #selector(copyHistoryItem(_:)), keyEquivalent: "")
+                item.target = self
+                item.toolTip = transcript   // hover shows full text
+                item.representedObject = transcript
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit WhisperDictation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem?.menu = menu
-        updateStatusBar()
+    }
+
+    @objc private func copyHistoryItem(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func updateStatusBar() {
