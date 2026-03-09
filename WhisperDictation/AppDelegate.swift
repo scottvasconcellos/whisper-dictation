@@ -207,7 +207,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let task = Process()
                 task.executableURL = URL(fileURLWithPath: whisperBin)
-                task.arguments = ["-m", whisperModel, "-f", wavPath, "-otxt"]
+                task.arguments = ["-m", whisperModel, "-f", wavPath, "-otxt",
+                                  "--prompt", "Claude Code, Anthropic. Continuous prose, no paragraph breaks."]
                 task.currentDirectoryURL = URL(fileURLWithPath: sessionDir)
                 try task.run()
                 var timedOut = false
@@ -224,7 +225,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     failedMessage = "whisper_exit_\(task.terminationStatus)"
                 } else {
                     let txtPath = "\(wavPath).txt"
-                    let raw = try? String(contentsOfFile: txtPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let raw = try? String(contentsOfFile: txtPath, encoding: .utf8)
+                        .components(separatedBy: .newlines)
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: " ")
                     if let t = raw, !t.isEmpty {
                         transcript = t
                     } else {
