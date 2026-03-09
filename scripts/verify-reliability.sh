@@ -72,8 +72,8 @@ for session_id, session_events in sessions.items():
             cycle["stopReason"] = event.get("stopReason", "unknown")
         elif event_type == "transcription_complete":
             cycle["transcribed"] = True
-        elif event_type == "paste_result":
-            cycle["pasteSuccess"] = event.get("success", False)
+        elif event_type == "paste_triggered":
+            cycle["pasteSuccess"] = True
             cycle["latencyMs"] = event.get("latencyMs")
         elif event_type == "error":
             cycle["errors"].append(event.get("message", "unknown"))

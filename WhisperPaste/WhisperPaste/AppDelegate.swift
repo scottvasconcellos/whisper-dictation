@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -16,6 +17,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func checkTrigger() {
         guard FileManager.default.fileExists(atPath: triggerPath) else { return }
 
+        guard let text = try? String(contentsOfFile: triggerPath, encoding: .utf8), !text.isEmpty else {
+            try? FileManager.default.removeItem(atPath: triggerPath)
+            return
+        }
+
         do {
             try FileManager.default.removeItem(atPath: triggerPath)
         } catch {
@@ -23,19 +29,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        Thread.sleep(forTimeInterval: 0.3)
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", "tell application \"System Events\" to keystroke \"v\" using command down"]
-        do {
-            try task.run()
-            task.waitUntilExit()
-            if task.terminationStatus != 0 {
-                log("osascript exit code: \(task.terminationStatus)")
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            Thread.sleep(forTimeInterval: 0.3)
+            DispatchQueue.main.async {
+                self?.insertText(text)
             }
-        } catch {
-            log("osascript failed: \(error)")
+        }
+    }
+
+    /// Inserts text at the current cursor position using the Accessibility API.
+    /// Sets kAXSelectedTextAttribute on the focused element, which replaces any
+    /// selection or inserts at cursor — no clipboard involved.
+    private func insertText(_ text: String) {
+        guard AXIsProcessTrusted() else {
+            log("Accessibility not granted — cannot type text")
+            return
+        }
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef else {
+            log("No focused element found")
+            return
+        }
+        let result = AXUIElementSetAttributeValue(focused as! AXUIElement, kAXSelectedTextAttribute as CFString, text as CFTypeRef)
+        if result != .success {
+            log("AXUIElement insert failed (code \(result.rawValue)) — no fallback, clipboard untouched")
         }
     }
 

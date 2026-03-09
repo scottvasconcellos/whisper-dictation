@@ -87,6 +87,15 @@ enum EventLogger {
         ])
     }
     
+    static func pasteTriggered(sessionId: String, latencyMs: Int?) {
+        var event: [String: Any] = [
+            "event": "paste_triggered",
+            "sessionId": sessionId
+        ]
+        if let lat = latencyMs { event["latencyMs"] = lat }
+        writeEvent(event)
+    }
+
     static func error(sessionId: String?, message: String, context: [String: Any] = [:]) {
         var event: [String: Any] = [
             "event": "error",

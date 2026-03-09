@@ -8,7 +8,7 @@ struct Config {
     var recordStopTrigger: String
     var whisperBin: String
     var whisperModel: String
-    var sessionRetentionDays: Int
+    var sessionRetentionCount: Int
     var silenceDurationSec: Int
 
     static func load() -> Config {
@@ -26,7 +26,7 @@ struct Config {
         var recordStopTrigger = ""
         var whisperModel = "\(home)/whisper-models/ggml-small.bin"
         var whisperBin = ""
-        var sessionRetentionDays = 7
+        var sessionRetentionCount = 5
         var silenceDurationSec = 8
 
         if let content = try? String(contentsOfFile: path, encoding: .utf8) {
@@ -42,7 +42,7 @@ struct Config {
                 case "TRIGGER_DIR", "RECORD_START_TRIGGER", "RECORD_STOP_TRIGGER": break // ignored; we force ~/.whisper-trigger
                 case "WHISPER_MODEL": whisperModel = val
                 case "WHISPER_BIN": whisperBin = val
-                case "SESSION_RETENTION_DAYS": sessionRetentionDays = Int(val) ?? 7
+                case "SESSION_RETENTION_COUNT": sessionRetentionCount = Int(val) ?? 5
                 case "SILENCE_DURATION_SEC": silenceDurationSec = Int(val) ?? 8
                 default: break
                 }
@@ -69,7 +69,7 @@ struct Config {
             recordStopTrigger: recordStopTrigger,
             whisperBin: whisperBin,
             whisperModel: whisperModel,
-            sessionRetentionDays: sessionRetentionDays,
+            sessionRetentionCount: sessionRetentionCount,
             silenceDurationSec: silenceDurationSec
         )
     }

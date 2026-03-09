@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Common helpers for Whisper Dictation scripts.
-# Source this at the top of whisper-start.sh, whisper-stop.sh, whisper-silence-watcher.sh.
+# Source this at the top of whisper-start.sh and whisper-stop.sh.
 
 # Karabiner may run with minimal env; ensure HOME is set
 export HOME="${HOME:-$(eval echo ~)}"
@@ -17,16 +17,13 @@ else
 fi
 
 # Defaults
-MIC_INDEX=0
 WHISPER_MODEL="${HOME}/whisper-models/ggml-small.bin"
 WHISPER_BIN=""
 SESSIONS_DIR="${HOME}/whisper-sessions"
 TRIGGER_DIR="${HOME}/.whisper-trigger"
 RECORD_START_TRIGGER=""
 RECORD_STOP_TRIGGER=""
-SILENCE_THRESHOLD_DB=-35
 SILENCE_DURATION_SEC=8
-SESSION_RETENTION_DAYS=7
 TRIGGER_TEST=0
 
 # Load config if present
@@ -42,16 +39,13 @@ if [[ -n "$CONFIG" ]]; then
     val="${val#"${val%%[![:space:]]*}"}"
     val="${val//\~/$HOME}"
     case "$key" in
-      MIC_INDEX) MIC_INDEX="$val" ;;
       WHISPER_MODEL) WHISPER_MODEL="$val" ;;
       WHISPER_BIN) WHISPER_BIN="$val" ;;
       SESSIONS_DIR) SESSIONS_DIR="$val" ;;
       TRIGGER_DIR) TRIGGER_DIR="$val" ;;
       RECORD_START_TRIGGER) RECORD_START_TRIGGER="$val" ;;
       RECORD_STOP_TRIGGER) RECORD_STOP_TRIGGER="$val" ;;
-      SILENCE_THRESHOLD_DB) SILENCE_THRESHOLD_DB="$val" ;;
       SILENCE_DURATION_SEC) SILENCE_DURATION_SEC="$val" ;;
-      SESSION_RETENTION_DAYS) SESSION_RETENTION_DAYS="$val" ;;
       TRIGGER_TEST) TRIGGER_TEST="$val" ;;
     esac
   done < "$CONFIG"
@@ -76,7 +70,6 @@ RECORD_START_TRIGGER="${HOME}/.whisper-trigger/record-start"
 RECORD_STOP_TRIGGER="${HOME}/.whisper-trigger/record-stop"
 WHISPER_MODEL="${WHISPER_MODEL//\~/$HOME}"
 
-# Script dir (for finding whisper-silence-watcher.sh)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="${HOME}/bin"
 

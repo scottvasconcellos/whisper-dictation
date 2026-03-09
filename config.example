@@ -2,10 +2,6 @@
 # Copy to ~/.config/whisper-dictation/config or ~/.whisper-dictation/config
 # All paths support ~ expansion.
 
-# Microphone: device index for avfoundation (0 = system default)
-# Run: ffmpeg -f avfoundation -list_devices true -i "" to list devices
-MIC_INDEX=0
-
 # Whisper model path (ggml-small.bin recommended)
 WHISPER_MODEL=~/whisper-models/ggml-small.bin
 
@@ -27,5 +23,5 @@ TRIGGER_DIR=~/.whisper-trigger
 SILENCE_THRESHOLD_DB=-35
 SILENCE_DURATION_SEC=8
 
-# Prune sessions older than this many days
-SESSION_RETENTION_DAYS=7
+# Keep only the N most recent session folders; delete older ones (default 5)
+SESSION_RETENTION_COUNT=5

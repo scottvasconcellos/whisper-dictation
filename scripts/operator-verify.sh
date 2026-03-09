@@ -31,7 +31,7 @@ echo "   ✓ App restarted"
 # Step 4: Clear old logs
 echo ""
 echo "Step 4: Clearing old logs..."
-LOG_PATH="${HOME}/whisper-sessions/debug.log"
+LOG_PATH="${HOME}/whisper-sessions/events.log"
 if [[ -f "$LOG_PATH" ]]; then
   > "$LOG_PATH"
   echo "   ✓ Logs cleared"

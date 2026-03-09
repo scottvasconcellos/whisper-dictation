@@ -15,7 +15,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var config: Config!
     private var pollTimer: Timer?
     private var recorder: Recorder?
-    private var state: DictationState = .idle
+    private var statusItem: NSStatusItem?
+    private var animationTimer: Timer?
+    private var animationFrame: Int = 0
+    private var state: DictationState = .idle {
+        didSet { updateStatusBar() }
+    }
     private var currentSessionId: String?
     private var stopRequestedReason: String? // "manual" or "silence" - manual always wins
     private var stopRequestedAt: Date?
@@ -23,13 +28,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         config = Config.load()
+        setupStatusBar()
         EventLogger.error(sessionId: nil, message: "app_launched", context: ["pid": ProcessInfo.processInfo.processIdentifier])
-        
-        // Request mic at launch when not yet determined so the system prompt appears
+        try? FileManager.default.createDirectory(atPath: config.triggerDir, withIntermediateDirectories: true)
+        let pasteTriggerDirAlt = "\(FileManager.default.homeDirectoryForCurrentUser.path)/.whisper-paste-trigger"
+        try? FileManager.default.createDirectory(atPath: pasteTriggerDirAlt, withIntermediateDirectories: true)
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
         }
-        
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in
             self?.pollTriggers()
         }
@@ -159,6 +165,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         runWhisperThenPaste(wavPath: wavPath, sessionDir: sessionDir, sessionId: sessionId, targetApp: targetApp)
     }
 
+    private static let whisperTimeoutSeconds: TimeInterval = 120
+
     private func runWhisperThenPaste(wavPath: String, sessionDir: String, sessionId: String, targetApp: NSRunningApplication?) {
         guard state == .stopping else { return }
         
@@ -184,64 +192,155 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Run Whisper and wait until it exits — we only proceed (and paste) when it's definitively done.
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: config.whisperBin)
-        task.arguments = ["-m", config.whisperModel, "-f", wavPath, "-otxt"]
-        task.currentDirectoryURL = URL(fileURLWithPath: sessionDir)
-        do {
-            try task.run()
-            task.waitUntilExit()
-        } catch {
-            EventLogger.error(sessionId: sessionId, message: "whisper_process_failed", context: ["error": String(describing: error)])
-            SoundHelper.playError()
-            resetToIdle(sessionDir: sessionDir)
-            return
-        }
+        let whisperBin = config.whisperBin
+        let whisperModel = config.whisperModel
+        let triggerDir = config.triggerDir
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let pasteTriggerDirAlt = "\(home)/.whisper-paste-trigger"
 
-        let txtPath = "\(wavPath).txt"
-        guard let text = try? String(contentsOfFile: txtPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty else {
-            EventLogger.error(sessionId: sessionId, message: "transcript_empty_or_missing", context: ["txtPath": txtPath])
-            SoundHelper.playError()
-            resetToIdle(sessionDir: sessionDir)
-            return
-        }
-        
-        EventLogger.transcriptionComplete(sessionId: sessionId, textLength: text.count)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var transcript: String?
+            var failedMessage: String?
 
-        // Always write to clipboard first
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        
-        state = .pasting
-        
-        // Calculate latency from stop request to paste attempt
-        let latencyMs: Int?
-        if let stopTime = stopRequestedAt {
-            latencyMs = Int((Date().timeIntervalSince(stopTime) * 1000).rounded())
-        } else {
-            latencyMs = nil
+            do {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: whisperBin)
+                task.arguments = ["-m", whisperModel, "-f", wavPath, "-otxt"]
+                task.currentDirectoryURL = URL(fileURLWithPath: sessionDir)
+                try task.run()
+                var timedOut = false
+                let timeoutItem = DispatchWorkItem {
+                    timedOut = true
+                    task.terminate()
+                }
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.whisperTimeoutSeconds, execute: timeoutItem)
+                task.waitUntilExit()
+                timeoutItem.cancel()
+                if timedOut {
+                    failedMessage = "whisper_timeout"
+                } else if task.terminationStatus != 0 {
+                    failedMessage = "whisper_exit_\(task.terminationStatus)"
+                } else {
+                    let txtPath = "\(wavPath).txt"
+                    let raw = try? String(contentsOfFile: txtPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let t = raw, !t.isEmpty {
+                        transcript = t
+                    } else {
+                        failedMessage = "transcript_empty_or_missing"
+                    }
+                }
+            } catch {
+                failedMessage = "whisper_process_failed"
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if let msg = failedMessage {
+                    EventLogger.error(sessionId: sessionId, message: msg, context: [:])
+                    SoundHelper.playError()
+                    self.resetToIdle(sessionDir: sessionDir)
+                    return
+                }
+                guard let text = transcript else {
+                    self.resetToIdle(sessionDir: sessionDir)
+                    return
+                }
+
+                EventLogger.transcriptionComplete(sessionId: sessionId, textLength: text.count)
+                state = .pasting
+
+                let latencyMs: Int?
+                if let stopTime = stopRequestedAt {
+                    latencyMs = Int((Date().timeIntervalSince(stopTime) * 1000).rounded())
+                } else {
+                    latencyMs = nil
+                }
+
+                let writeTriggers = { [weak self] in
+                    guard let self = self else { return }
+                    // Write text into trigger files — Hammerspoon/WhisperPaste read it and type
+                    // directly into the focused field. Clipboard is never touched.
+                    try? FileManager.default.createDirectory(atPath: triggerDir, withIntermediateDirectories: true)
+                    let pasteTriggerPath = "\(triggerDir)/paste-request"
+                    try? text.write(toFile: pasteTriggerPath, atomically: true, encoding: .utf8)
+                    try? FileManager.default.createDirectory(atPath: pasteTriggerDirAlt, withIntermediateDirectories: true)
+                    let pasteTriggerPathAlt = "\(pasteTriggerDirAlt)/request"
+                    try? text.write(toFile: pasteTriggerPathAlt, atomically: true, encoding: .utf8)
+                    EventLogger.pasteTriggered(sessionId: sessionId, latencyMs: latencyMs)
+                    SoundHelper.playFrog()
+                    self.resetToIdle(sessionDir: sessionDir)
+                }
+
+                if let app = targetApp, app != NSRunningApplication.current {
+                    app.activate(options: [])
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: writeTriggers)
+                } else {
+                    writeTriggers()
+                }
+            }
         }
-        
-        // Bring target app to front so Hammerspoon’s Cmd+V goes there
-        if let app = targetApp, app != NSRunningApplication.current {
-            app.activate(options: [])
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        
-        // Single paste path: write trigger file; Hammerspoon watches and sends Cmd+V
-        let pasteTriggerPath = "\(config.triggerDir)/paste-request"
-        try? FileManager.default.createDirectory(atPath: config.triggerDir, withIntermediateDirectories: true)
-        try? "".write(toFile: pasteTriggerPath, atomically: true, encoding: .utf8)
-        var triggerContext: [String: Any] = ["path": pasteTriggerPath]
-        if let lat = latencyMs { triggerContext["latencyMs"] = lat }
-        EventLogger.error(sessionId: sessionId, message: "paste_trigger_written", context: triggerContext)
-        SoundHelper.playFrog()
-        
-        resetToIdle(sessionDir: sessionDir)
     }
     
+    // MARK: - Status Bar
+
+    private func setupStatusBar() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem?.button {
+            button.image = nil
+            button.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        }
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Quit WhisperDictation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem?.menu = menu
+        updateStatusBar()
+    }
+
+    private func updateStatusBar() {
+        animationTimer?.invalidate()
+        animationTimer = nil
+        animationFrame = 0
+
+        switch state {
+        case .idle:
+            setLabel("Whisper", color: .secondaryLabelColor)
+
+        case .recording:
+            // Pulse: filled dot alternates with empty dot
+            setLabel("Whisper  ● rec", color: .systemRed)
+            animationTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.animationFrame += 1
+                let dot = self.animationFrame % 2 == 0 ? "●" : "○"
+                self.setLabel("Whisper  \(dot) rec", color: .systemRed)
+            }
+
+        case .stopping, .transcribing:
+            // Cycling dots: Processing· → Processing·· → Processing···
+            setLabel("Whisper  Processing·", color: .systemOrange)
+            animationTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.animationFrame += 1
+                let dots = String(repeating: "·", count: (self.animationFrame % 3) + 1)
+                self.setLabel("Whisper  Processing\(dots)", color: .systemOrange)
+            }
+
+        case .pasting:
+            setLabel("Whisper  Done ✓", color: .systemGreen)
+        }
+    }
+
+    private func setLabel(_ text: String, color: NSColor) {
+        guard let button = statusItem?.button else { return }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: color,
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        ]
+        button.attributedTitle = NSAttributedString(string: text, attributes: attrs)
+    }
+
+    // MARK: - Idle
+
     private func resetToIdle(sessionDir: String) {
         state = .idle
         currentSessionId = nil
@@ -254,18 +353,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pruneAndClear(sessionDir: String) {
         try? FileManager.default.removeItem(atPath: "\(config.sessionsDir)/current_session")
-        let days = config.sessionRetentionDays
-        guard let enumerator = FileManager.default.enumerator(atPath: config.sessionsDir) else { return }
-        let cutoff = Date().addingTimeInterval(-Double(days * 86400))
-        while let name = enumerator.nextObject() as? String {
+        let keepCount = config.sessionRetentionCount
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: config.sessionsDir) else { return }
+        var sessionDirs: [(name: String, modDate: Date)] = []
+        for name in contents {
             let full = "\(config.sessionsDir)/\(name)"
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: full, isDirectory: &isDir), isDir.boolValue else { continue }
             guard name.hasPrefix("20"), name.count >= 15 else { continue }
             if let attrs = try? FileManager.default.attributesOfItem(atPath: full),
-               let mod = attrs[.modificationDate] as? Date, mod < cutoff {
-                try? FileManager.default.removeItem(atPath: full)
+               let mod = attrs[.modificationDate] as? Date {
+                sessionDirs.append((name: name, modDate: mod))
             }
+        }
+        sessionDirs.sort { $0.modDate > $1.modDate }
+        for index in keepCount..<sessionDirs.count {
+            let full = "\(config.sessionsDir)/\(sessionDirs[index].name)"
+            try? FileManager.default.removeItem(atPath: full)
         }
     }
 
